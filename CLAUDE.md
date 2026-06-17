@@ -55,6 +55,12 @@ eight synthetic vessels that drift around. Good for UI work without a feed.
 - Match the existing style: 2-space indent, compact vanilla JS.
 - Don't reintroduce a hardcoded API key (see Security).
 
+## Maintaining this file
+
+Keep `CLAUDE.md` current. When work in a session changes something documented here — file
+layout, how to run, conventions, security posture, tooling, or gotchas — update the
+relevant section in that same session so this file always reflects reality.
+
 ## Security
 
 - **Never hardcode the aisstream key.** It lives only in the `AISSTREAM_API_KEY`
@@ -73,5 +79,8 @@ eight synthetic vessels that drift around. Good for UI work without a feed.
 
 ## This machine
 
-Node.js and the GitHub CLI (`gh`) are not installed here, so the proxy can't be run or
-tested locally without installing Node first. The HTML's demo mode works in any browser.
+Node.js (v24) and the GitHub CLI (`gh`, authenticated) are installed, so the proxy can be
+run/tested locally and `gh` can manage the repo. Gotcha: a freshly installed tool may not
+be on an already-open shell's PATH — open a new shell, or call binaries by full path
+(`/c/Program Files/nodejs/`, `/c/Program Files/GitHub CLI/`). The HTML's demo mode works
+in any browser.
