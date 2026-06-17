@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+
+# secrets / local env
+.env
+.env.local
+config.local.js
+
+# Claude Code personal (machine-local) settings
+.claude/settings.local.json
+
+# logs
+*.log
+npm-debug.log*
+
+# OS cruft
+.DS_Store
+Thumbs.db

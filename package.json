@@ -1,0 +1,16 @@
+{
+  "name": "harborview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live AIS ship traffic over Boston Harbor, framed to your window at Pier 4.",
+  "main": "harborview-proxy.js",
+  "scripts": {
+    "start": "node harborview-proxy.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
