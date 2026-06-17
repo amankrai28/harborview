@@ -12,9 +12,14 @@ calibrated horizon panorama, a top-down radar map, and a per-ship detail panel.
 
 - `harborview.html` — the entire client app (HTML + CSS + vanilla JS). No build step, no
   framework, no browser dependencies. Self-contained and openable directly.
-- `harborview-proxy.js` — optional Node relay. Holds the aisstream WebSocket, relays it to
-  the page over `localhost:8080`, and serves the HTML. CommonJS; only dependency is `ws`.
-- `package.json` — proxy dependency and `npm start` script.
+- `harborview-proxy.js` — optional Node relay for local dev. Holds the aisstream WebSocket,
+  relays it to the page over `localhost:8080`, and serves the HTML. CommonJS; only
+  dependency is `ws`.
+- `api/ships.js` — Vercel serverless function for the deployed site. Takes a short AIS
+  snapshot (opens a WS to aisstream, listens ~6.5s, returns deduped messages as JSON) that
+  the client polls. CommonJS; uses `ws`.
+- `vercel.json` — serves `harborview.html` at `/` and sets the function's `maxDuration`.
+- `package.json` — `ws` dependency and `npm start` script.
 - `.env.example` — template for the one secret, `AISSTREAM_API_KEY`.
 
 ## Running locally
@@ -30,6 +35,15 @@ Live data requires the proxy (the client ships without a key):
 Opening `harborview.html` directly (file://) has no key, so it renders **demo mode** —
 eight synthetic vessels that drift around. Good for UI work without a feed.
 
+## Deployment (Vercel)
+
+The repo auto-deploys to Vercel on push to `main`. Vercel can't run `harborview-proxy.js`
+(no persistent WebSocket server), so live data on the deployed site comes from the
+`api/ships` serverless function, which the client polls. Set `AISSTREAM_API_KEY` in the
+Vercel **project settings** (not in GitHub). The local proxy remains the way to get true
+streaming during development. Near-real-time only (≈9s polling); the client accumulates
+vessels across polls.
+
 ## How it works
 
 - **Data**: aisstream.io WebSocket, filtered to a Boston Harbor bounding box. Two message
@@ -44,9 +58,10 @@ eight synthetic vessels that drift around. Good for UI work without a feed.
   field-of-view cone; the detail panel shows the selected ship.
 - **Calibration**: two sliders set the left/right bearing edges of the real window;
   persisted in `localStorage` under `harborview_fov`.
-- **Connection**: the page auto-detects — served from `localhost:8080` it uses the proxy;
-  otherwise it would connect directly (now skipped when there is no key) and falls back to
-  demo on failure.
+- **Connection** (`MODE`): the page auto-detects three modes — `proxy` (served from
+  `localhost:8080` → WebSocket relay, true streaming), `poll` (any other http/https origin,
+  e.g. Vercel → polls `/api/ships` every ~9s and replays messages through `handle()`), and
+  `demo` (`file://` → synthetic ships). Each falls back to demo on failure.
 
 ## Conventions
 
@@ -64,7 +79,8 @@ relevant section in that same session so this file always reflects reality.
 ## Security
 
 - **Never hardcode the aisstream key.** It lives only in the `AISSTREAM_API_KEY`
-  environment variable, read by the proxy. The client has no secret.
+  environment variable — read by the local proxy and by the `api/ships` serverless function
+  (set in Vercel project settings). The client has no secret.
 - `.env`, `.env.local`, and `config.local.js` are git-ignored.
 - Any API key that previously appeared in these files must be treated as **compromised**
   and rotated at aisstream.io. Use the new key only via `.env` / the env var.

@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/ships.js": { "maxDuration": 10 }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/harborview.html" }
+  ]
+}

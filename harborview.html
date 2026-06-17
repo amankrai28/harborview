@@ -190,10 +190,12 @@
   var OBS = { lat: 42.3535, lon: -71.0420 };          // Pier 4 window
   var BBOX = [[[42.45, -70.86], [42.27, -71.13]]];     // Boston Harbor box
   var MAXKM = 18;
-  // auto-route: if this page is served by the local proxy, use it; otherwise connect direct.
-  var direct = "wss://stream.aisstream.io/v0/stream";
-  var ENDPOINT = (location.host === "localhost:8080" || location.host === "127.0.0.1:8080")
-      ? ("ws://" + location.host) : direct;
+  // auto-route: local proxy → WebSocket relay; deployed (http/https) → /api/ships polling; file:// → demo.
+  var isLocalProxy = (location.host === "localhost:8080" || location.host === "127.0.0.1:8080");
+  var isHttp = (location.protocol === "http:" || location.protocol === "https:");
+  var MODE = isLocalProxy ? "proxy" : (isHttp ? "poll" : "demo");
+  var ENDPOINT = "ws://" + location.host;          // used in proxy mode only
+  var POLL_URL = "/api/ships", POLL_MS = 9000;
 
   /* ---------- landmarks (real coordinates → bearings computed) ---------- */
   var LM = [
@@ -435,21 +437,31 @@
   /* ---------- connection ---------- */
   var ws, tries=0;
   function connect(){
-    if(!API_KEY && ENDPOINT===direct){ fail(); return; }
     try{ ws=new WebSocket(ENDPOINT); }catch(e){ fail(); return; }
     ws.onopen=function(){ tries=0; ws.send(JSON.stringify({APIKey:API_KEY, BoundingBoxes:BBOX, FilterMessageTypes:["PositionReport","ShipStaticData"]})); };
     ws.onmessage=function(ev){ try{ handle(JSON.parse(ev.data)); }catch(e){} };
     ws.onclose=function(){ if(!live && tries>=3){ fail(); } else { tries++; setTimeout(connect, 3000); } };
     ws.onerror=function(){ try{ws.close();}catch(e){} };
   }
+  function poll(){
+    fetch(POLL_URL, {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
+      .then(function(d){
+        if(!live){ live=true; demo=false; banner(""); }
+        if(d && d.messages) d.messages.forEach(function(m){ try{ handle(m); }catch(e){} });
+        setTimeout(poll, POLL_MS);
+      })
+      .catch(function(){ if(!live) fail(); else setTimeout(poll, POLL_MS); });
+  }
   function fail(){
     if(live) return;
     if(!demo){
       demo=true; loadDemo();
-      var localNote = (ENDPOINT===direct)
-        ? "This build ships without an embedded API key. Run the included <b>harborview-proxy.js</b> (it holds your key) and open <b>http://localhost:8080</b> for live data."
-        : "Couldn’t reach the local proxy. Make sure <b>harborview-proxy.js</b> is running on port 8080.";
-      banner("<div><b>Showing demo data.</b> No live feed reached the page — likely because this is open inside a sandbox (such as the chat preview) or over file://. Download this file and open it in your browser. "+localNote+"</div>");
+      var localNote =
+        MODE==="poll" ? "The live endpoint <b>/api/ships</b> didn’t respond — check that <b>AISSTREAM_API_KEY</b> is set in your Vercel project settings."
+        : MODE==="proxy" ? "Couldn’t reach the local proxy. Make sure <b>harborview-proxy.js</b> is running on port 8080."
+        : "Open this over the local proxy (<b>http://localhost:8080</b>) or the deployed site for live data.";
+      banner("<div><b>Showing demo data.</b> "+localNote+"</div>");
     }
   }
 
@@ -502,8 +514,10 @@
 
   /* ---------- go ---------- */
   buildLandmarks(); buildMap(); buildTicks(); syncLabels(); render();
-  connect();
-  setTimeout(function(){ if(!live) fail(); }, 8000);
+  if(MODE==="proxy") connect();
+  else if(MODE==="poll") poll();
+  else fail();
+  if(MODE!=="demo") setTimeout(function(){ if(!live) fail(); }, 8000);
   setInterval(render, 1000);
 })();
 </script>
