@@ -32,11 +32,16 @@ The repo auto-deploys on every push to `main`.
 
 1. In Vercel: **Add New → Project → Import** this repo, framework preset **Other**.
 2. **Settings → Environment Variables**: add `AISSTREAM_API_KEY` (your key from aisstream.io).
-3. Deploy.
+3. *(Recommended)* **Storage → Create Database → Upstash Redis**, connected to the project.
+   This lets `/api/ships` remember vessel details across polls, so names, sizes, IMO, call
+   signs and destinations fill in instead of staying blank. Vercel injects the store's env
+   vars automatically — no code change needed.
+4. Deploy.
 
 Vercel can't run the WebSocket proxy (no persistent server), so the deployed site gets live
-data from the `api/ships` serverless function, which the page polls every ~9s and
-accumulates. The key stays server-side in Vercel — it is never sent to the browser.
+data from the `api/ships` serverless function, which the page polls every ~9s. With the KV
+store connected it accumulates static data over time; without it you still get live
+positions, just sparser detail. The key stays server-side in Vercel — never sent to the browser.
 
 ## How it works
 

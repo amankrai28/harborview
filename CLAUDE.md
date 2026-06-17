@@ -15,9 +15,10 @@ calibrated horizon panorama, a top-down radar map, and a per-ship detail panel.
 - `harborview-proxy.js` — optional Node relay for local dev. Holds the aisstream WebSocket,
   relays it to the page over `localhost:8080`, and serves the HTML. CommonJS; only
   dependency is `ws`.
-- `api/ships.js` — Vercel serverless function for the deployed site. Takes a short AIS
-  snapshot (opens a WS to aisstream, listens ~6.5s, returns deduped messages as JSON) that
-  the client polls. CommonJS; uses `ws`.
+- `api/ships.js` — Vercel serverless function for the deployed site. Listens to aisstream
+  ~6.5s and, if a Redis/KV store is connected, merges results into one accumulated document
+  so static fields persist across polls; returns vessel records as JSON for the client to
+  poll. CommonJS; uses `ws` + `@upstash/redis`.
 - `vercel.json` — serves `harborview.html` at `/` and sets the function's `maxDuration`.
 - `package.json` — `ws` dependency and `npm start` script.
 - `.env.example` — template for the one secret, `AISSTREAM_API_KEY`.
@@ -39,10 +40,18 @@ eight synthetic vessels that drift around. Good for UI work without a feed.
 
 The repo auto-deploys to Vercel on push to `main`. Vercel can't run `harborview-proxy.js`
 (no persistent WebSocket server), so live data on the deployed site comes from the
-`api/ships` serverless function, which the client polls. Set `AISSTREAM_API_KEY` in the
-Vercel **project settings** (not in GitHub). The local proxy remains the way to get true
-streaming during development. Near-real-time only (≈9s polling); the client accumulates
-vessels across polls.
+`api/ships` serverless function, which the client polls (~9s). Set `AISSTREAM_API_KEY` in
+the Vercel **project settings** (not in GitHub).
+
+**Enrichment (optional but recommended):** connect a Redis/KV store (Vercel Storage →
+Upstash Redis) to the project. `api/ships` then accumulates each vessel in one document
+(`harbor:vessels`), so static fields (name, dimensions, IMO, call sign, type, destination)
+— which AIS sends only every few minutes — persist across polls and fill in on fresh loads.
+It reads `KV_REST_API_URL`/`_TOKEN` or `UPSTASH_REDIS_REST_URL`/`_TOKEN` (whichever Vercel
+injects); single-document model keeps it to ~2 commands/poll. Without a store it gracefully
+returns snapshot-only data.
+
+The local proxy remains the way to get true streaming during development.
 
 ## How it works
 
@@ -59,9 +68,10 @@ vessels across polls.
 - **Calibration**: two sliders set the left/right bearing edges of the real window;
   persisted in `localStorage` under `harborview_fov`.
 - **Connection** (`MODE`): the page auto-detects three modes — `proxy` (served from
-  `localhost:8080` → WebSocket relay, true streaming), `poll` (any other http/https origin,
-  e.g. Vercel → polls `/api/ships` every ~9s and replays messages through `handle()`), and
-  `demo` (`file://` → synthetic ships). Each falls back to demo on failure.
+  `localhost:8080` → WebSocket relay, true streaming, parsed by `handle()`), `poll` (any
+  other http/https origin, e.g. Vercel → polls `/api/ships` every ~9s and applies the
+  returned vessel records via `applyVessel()`), and `demo` (`file://` → synthetic ships).
+  Each falls back to demo on failure.
 
 ## Conventions
 

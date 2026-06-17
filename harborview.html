@@ -443,12 +443,20 @@
     ws.onclose=function(){ if(!live && tries>=3){ fail(); } else { tries++; setTimeout(connect, 3000); } };
     ws.onerror=function(){ try{ws.close();}catch(e){} };
   }
+  function applyVessel(v){
+    if(v.lat==null || v.lon==null) return;            // need a position to place it
+    var ti=typeInfo(v.type, v.len);
+    var rec=upsert(v.mmsi, {lat:v.lat, lon:v.lon, sog:v.sog, course:v.course, heading:v.heading, nav:v.nav,
+      name:v.name||undefined, len:v.len, beam:v.beam, dest:v.dest||null, imo:v.imo||null, cs:v.cs||null,
+      cat:ti.label, glyph:ti.glyph});
+    if(v.ageMs!=null) rec.t=Date.now()-v.ageMs;       // preserve true last-seen → expiry + "last report" stay correct
+  }
   function poll(){
     fetch(POLL_URL, {cache:"no-store"})
       .then(function(r){ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
       .then(function(d){
         if(!live){ live=true; demo=false; banner(""); }
-        if(d && d.messages) d.messages.forEach(function(m){ try{ handle(m); }catch(e){} });
+        if(d && d.vessels) d.vessels.forEach(applyVessel);
         setTimeout(poll, POLL_MS);
       })
       .catch(function(){ if(!live) fail(); else setTimeout(poll, POLL_MS); });
