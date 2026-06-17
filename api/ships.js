@@ -17,7 +17,7 @@ const WebSocket = require("ws");
 
 const BBOX = [[[42.45, -70.86], [42.27, -71.13]]]; // Boston Harbor (same box as the proxy)
 const TYPES = ["PositionReport", "ShipStaticData"];
-const LISTEN_MS = 6500;              // collection window; stays well under maxDuration
+const LISTEN_MS = 4000;              // collection window; shorter = fresher (store accumulates between polls)
 const KEY = "harbor:vessels";        // single accumulated document
 const STALE_MS = 15 * 60 * 1000;     // drop vessels not heard from in 15 min
 const SAFETY_TTL = 86400;            // seconds; clears the doc if the project goes idle
@@ -115,6 +115,7 @@ function collect(apiKey) {
 }
 
 module.exports = async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // public AIS data; lets the page be QC'd locally
   const apiKey = process.env.AISSTREAM_API_KEY;
   if (!apiKey) {
     res.status(500).json({ ok: false, error: "AISSTREAM_API_KEY is not set on the server" });

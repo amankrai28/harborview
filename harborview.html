@@ -195,7 +195,7 @@
   var isHttp = (location.protocol === "http:" || location.protocol === "https:");
   var MODE = isLocalProxy ? "proxy" : (isHttp ? "poll" : "demo");
   var ENDPOINT = "ws://" + location.host;          // used in proxy mode only
-  var POLL_URL = "/api/ships", POLL_MS = 9000;
+  var POLL_URL = "/api/ships", POLL_MS = 3000;
 
   /* ---------- landmarks (real coordinates → bearings computed) ---------- */
   var LM = [
