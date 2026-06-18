@@ -1,16 +1,16 @@
 # Harbor View
 
-Live AIS ship traffic over Boston Harbor, framed to the view from a window at Pier 4.
-Vessels are drawn three ways — a calibrated horizon **panorama**, a top-down **radar
-map**, and a per-ship **detail panel**. Click any ship for its name, flag, destination,
-speed, size, and heading.
+Live AIS ship traffic over Boston Harbor on a **top-down map**, oriented to the view out a
+window at Pier 4. Vessels are drawn as heading-pointed, type-shaped hulls; click any ship
+for its name, flag, destination, speed, size, and heading.
 
 ![status: live / demo](https://img.shields.io/badge/feed-AIS%20via%20aisstream.io-46C2B0)
 
 ## Quick start
 
-You only need the proxy for **live** data. To just see the UI, open `harborview.html` in
-any browser — with no key it renders demo data (synthetic ships that drift around).
+You only need the proxy for local **streaming**. To just see the UI, open `harborview.html`
+in any browser — it pulls live data from the deployed `/api/ships` (or shows demo ships if
+it can't reach it).
 
 1. Install [Node.js](https://nodejs.org) (≥ 20.6 recommended for `--env-file`).
 2. `npm install`
@@ -45,23 +45,21 @@ positions, just sparser detail. The key stays server-side in Vercel — never se
 
 ## How it works
 
-`harborview.html` is the whole client — HTML + CSS + vanilla JS, no build step, no
-framework. It opens a WebSocket to the AIS feed (filtered to a Boston Harbor bounding
-box), converts each vessel's lat/lon into a range and bearing from the observer window,
-and renders it. The page auto-detects how to get data: the local proxy (`localhost:8080`,
-true streaming), the `/api/ships` endpoint on a deployed site (polled every ~9s), or demo
-mode (`file://`).
+`harborview.html` is the whole client — a single HTML file (it loads MapLibre GL + CARTO
+dark tiles from a CDN for the map). It plots each vessel at its lat/lon as a top-down,
+heading-oriented hull on a harbor map rotated to the Pier 4 window view, and opens a detail
+panel on click. It gets data from the local proxy (`localhost:8080`, true streaming) or by
+polling `/api/ships` (deployed, ~3s); it falls back to demo ships if neither responds.
 
 `harborview-proxy.js` is a small Node relay for local dev. aisstream.io is unreliable on
 direct browser connections (an HTTP/2 WebSocket-upgrade quirk), so the proxy holds the
 upstream connection, relays it to the page over localhost, and also serves the HTML. Its
 only dependency is `ws`.
 
-### Calibrate to your window
+### Orientation
 
-Use the two sliders to set the left/right bearing edges of your real window, then line up
-a labelled landmark on screen with the same one outside. After that, every bearing is
-locked to reality. Your calibration is saved in the browser.
+The map opens rotated to match the view out the Pier 4 window. Use the compass (top-right)
+to spin it or reset to north.
 
 ## Security
 
@@ -74,5 +72,4 @@ key in the client, proxy, or function.
 
 - AIS reports only broad ship types (a container ship and a bulk carrier both say
   "cargo"), so silhouettes are by category. Many small craft don't transmit at all.
-- Bearings are meaningful only after you calibrate the sliders to your window.
 - Owner and build year aren't in AIS — use the per-ship MarineTraffic profile link.
