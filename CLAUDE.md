@@ -66,9 +66,13 @@ The local proxy remains the way to get true streaming during development.
   demo ships.
 - **Map view**: a full-screen MapLibre map (CARTO dark vector tiles), rotated to the Pier 4
   window view (`WINDOW_BEARING`, ~30°). Vessels are MapLibre markers — top-down hull
-  silhouettes by type (`shipSVG`), sized by length, rotated by heading; click → detail
-  panel. Curated harbor labels are added on map load; `geo()` still computes the
-  range/bearing readout shown in the panel.
+  silhouettes by type (`shipSVG`), drawn **to true scale** (metres-at-zoom via
+  `metresPerPixel`, with a min-px floor), rotated by heading; click → detail panel. Moving
+  ships are **dead-reckoned** to an estimated current position, with a dashed line back to
+  the last AIS fix (`fwd()`) — only for vessels making >1 kn with a **fresh (<60s) fix**, and
+  never for anchored/moored (nav 1/5), so stale/stopped ships don't draw misleading lines;
+  the panel flags it as estimated. Curated harbor
+  labels load on map init; `geo()` computes the range/bearing readout.
 - **Connection** (`MODE`): `proxy` (served from `localhost:8080` → WebSocket relay, parsed
   by `handle()`) or `poll` (everything else → polls `/api/ships` ~3s, applied via
   `applyVessel()`). `file://` also polls — the deployed `/api/ships` via its CORS header —

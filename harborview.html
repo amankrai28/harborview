@@ -122,6 +122,13 @@
   }
   var pad = function(x){return String(Math.round(((x%360)+360)%360)).padStart(3,"0");};
   var clamp = function(x,a,b){return Math.max(a,Math.min(b,x));};
+  function fwd(lat, lon, brg, km){ // destination point from an arbitrary origin (dead-reckoning)
+    var d=km/6371, b=brg*TORAD, la1=lat*TORAD, lo1=lon*TORAD;
+    var la2=Math.asin(Math.sin(la1)*Math.cos(d)+Math.cos(la1)*Math.sin(d)*Math.cos(b));
+    var lo2=lo1+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(la1), Math.cos(d)-Math.sin(la1)*Math.sin(la2));
+    return {lat:la2/TORAD, lon:lo2/TORAD};
+  }
+  var MIN_PX=12, MAXPROJ_MS=60*1000;  // ship-icon size floor (px); only dead-reckon fixes < 60s old
 
   /* ---------- AIS lookups ---------- */
   var MID = {"201":"Albania","205":"Belgium","209":"Cyprus","210":"Cyprus","211":"Germany","212":"Cyprus","218":"Germany","219":"Denmark","220":"Denmark","226":"France","227":"France","228":"France","229":"Malta","230":"Finland","231":"Faroe Is.","232":"United Kingdom","233":"United Kingdom","234":"United Kingdom","235":"United Kingdom","236":"Gibraltar","237":"Greece","238":"Croatia","239":"Greece","240":"Greece","241":"Greece","244":"Netherlands","245":"Netherlands","246":"Netherlands","247":"Italy","248":"Malta","249":"Malta","256":"Malta","257":"Norway","258":"Norway","259":"Norway","265":"Sweden","266":"Sweden","269":"Switzerland","271":"Türkiye","303":"USA (Alaska)","304":"Antigua & Barbuda","305":"Antigua & Barbuda","306":"Curaçao","308":"Bahamas","309":"Bahamas","311":"Bahamas","316":"Canada","319":"Cayman Is.","338":"USA","341":"St Kitts & Nevis","351":"Panama","352":"Panama","353":"Panama","354":"Panama","355":"Panama","356":"Panama","357":"Panama","366":"USA","367":"USA","368":"USA","369":"USA","370":"Panama","371":"Panama","372":"Panama","373":"Panama","374":"Panama","375":"St Vincent","376":"St Vincent","377":"St Vincent","412":"China","413":"China","416":"Taiwan","431":"Japan","432":"Japan","440":"South Korea","441":"South Korea","477":"Hong Kong","525":"Indonesia","533":"Malaysia","538":"Marshall Is.","563":"Singapore","564":"Singapore","565":"Singapore","566":"Singapore","574":"Vietnam","636":"Liberia","637":"Liberia","657":"Nigeria","710":"Brazil","725":"Chile"};
@@ -190,6 +197,7 @@
     map=new maplibregl.Map({container:"map",style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
       center:[-71.028,42.356], zoom:13, bearing:WINDOW_BEARING, pitch:0});
     map.addControl(new maplibregl.NavigationControl({showCompass:true,visualizePitch:false}),"top-right");
+    map.on("zoomend", render);  // re-size hulls to scale on zoom
     map.on("load",function(){
       try{ map.setPaintProperty("background","background-color","#0f1d27"); }catch(e){}
       (map.getStyle().layers||[]).forEach(function(l){
@@ -202,6 +210,12 @@
         var el=document.createElement("div"); el.className="loc"+(p.you?" you":""); el.textContent=p.name;
         new maplibregl.Marker({element:el,anchor:"left"}).setLngLat([p.lon,p.lat]).addTo(map);
       });
+      // dead-reckoning overlay: dashed line from last AIS fix → projected position, + a dot at the fix
+      map.addSource("proj",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
+      map.addLayer({id:"proj-line",type:"line",source:"proj",filter:["==","$type","LineString"],
+        paint:{"line-color":"#9DB2BF","line-width":1.3,"line-opacity":0.6,"line-dasharray":[2,2]}});
+      map.addLayer({id:"proj-fix",type:"circle",source:"proj",filter:["==","$type","Point"],
+        paint:{"circle-radius":3,"circle-color":"#9DB2BF","circle-opacity":0.85,"circle-stroke-color":"#06151d","circle-stroke-width":1}});
       mapReady=true; render();
     });
   }
@@ -217,21 +231,31 @@
   }
 
   /* ---------- render ---------- */
+  function metresPerPixel(lat){ return 40075016.686*Math.cos(lat*TORAD)/(512*Math.pow(2, map.getZoom())); }
   function render(){
     var now=Date.now(), tot=0;
     if(!mapReady || !map){ renderDetail(now); return; }
-    var seen=new Set();
+    var seen=new Set(), feats=[], mpp=metresPerPixel(OBS.lat);
     vessels.forEach(function(v){
       if(!v.demo && now - v.t > 12*60*1000){ vessels.delete(v.mmsi); var mm=shipMarkers.get(v.mmsi); if(mm){mm.marker.remove();shipMarkers.delete(v.mmsi);} return; }
       if(v.lat==null || v.lon==null) return;
       tot++; seen.add(v.mmsi);
-      var m=ensureMarker(v), on=v.mmsi===sel;
-      m.marker.setLngLat([v.lon, v.lat]);
-      m.marker.setRotation(v.heading!=null ? v.heading : (v.course!=null ? v.course : 0));
-      var Lpx=clamp((v.len||30)/4, 16, 60), key=v.glyph+"|"+Math.round(Lpx)+"|"+(on?1:0)+"|"+Math.round(v.beam||0);
+      var on=v.mmsi===sel, course=(v.course!=null ? v.course : v.heading);
+      // dead-reckon moving ships to an estimated "now" position; mark it for the detail panel
+      var ageSec=(now-v.t)/1000, plat=v.lat, plon=v.lon; v._est=0;
+      if(!v.demo && v.sog!=null && v.sog>1 && course!=null && v.nav!==1 && v.nav!==5 && (now-v.t)<MAXPROJ_MS){
+        var p=fwd(v.lat, v.lon, course, v.sog*1.852*(ageSec/3600)); plat=p.lat; plon=p.lon; v._est=Math.round(ageSec);
+        feats.push({type:"Feature",geometry:{type:"LineString",coordinates:[[v.lon,v.lat],[plon,plat]]}});
+        feats.push({type:"Feature",geometry:{type:"Point",coordinates:[v.lon,v.lat]}});
+      }
+      var m=ensureMarker(v);
+      m.marker.setLngLat([plon, plat]);
+      m.marker.setRotation(v.heading!=null ? v.heading : (course!=null ? course : 0));
+      var Lpx=clamp((v.len||30)/mpp, MIN_PX, 400), key=v.glyph+"|"+Math.round(Lpx)+"|"+(on?1:0)+"|"+Math.round(v.beam||0);
       if(m.key!==key){ m.el.innerHTML=shipSVG(v.glyph, v.len, v.beam, Lpx, on); m.key=key; }
     });
     shipMarkers.forEach(function(m,mmsi){ if(!seen.has(mmsi)){ m.marker.remove(); shipMarkers.delete(mmsi);} });
+    var src=map.getSource("proj"); if(src) src.setData({type:"FeatureCollection",features:feats});
     setStatus(tot);
     renderDetail(now);
   }
@@ -253,7 +277,8 @@
       + row("Call sign", (v.cs? v.cs : "—"))
       + row("Position", v.lat.toFixed(4)+"°, "+v.lon.toFixed(4)+"° <span class='bdg b-ais'>AIS</span>")
       + row("Range / bearing", (v.range!=null?v.range.toFixed(1):"–")+" km · "+pad(v.bearing)+"° <span class='bdg b-ais'>AIS</span>")
-      + row("Last report", age);
+      + row("Last report", age)
+      + (v._est ? row("Shown position", '<span style="color:var(--amber)">estimated · projected ~'+v._est+'s</span>') : "");
     var prof = v.demo ? "" :
       '<a class="profile" target="_blank" rel="noopener" href="https://www.marinetraffic.com/en/ais/details/ships/mmsi:'+v.mmsi+'">Owner, age &amp; photo — full profile <span aria-hidden="true">↗</span></a>';
     el.className="detail show";
