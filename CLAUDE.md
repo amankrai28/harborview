@@ -59,8 +59,8 @@ The local proxy remains the way to get true streaming during development.
 
 - **Data**: aisstream.io WebSocket, filtered to a Boston Harbor bounding box. Two message
   types — `PositionReport` (lat/lon, speed, course, heading, nav status) and
-  `ShipStaticData` (name, dimensions, destination, IMO, call sign, type). See `handle()`
-  and `upsert()`.
+  `ShipStaticData` (name, dimensions, destination, ETA, draught, IMO, call sign, type). See
+  `handle()` and `upsert()`.
 - **Geometry**: `geo(lat,lon)` converts a vessel position into range (km) + bearing (deg)
   from the observer `OBS` (the Pier 4 window). `destPoint()` is the inverse, used to place
   demo ships.

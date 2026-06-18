@@ -23,7 +23,7 @@ const STALE_MS = 15 * 60 * 1000;     // drop vessels not heard from in 15 min
 const SAFETY_TTL = 86400;            // seconds; clears the doc if the project goes idle
 
 const DYNAMIC_FIELDS = ["lat", "lon", "sog", "course", "heading", "nav"];
-const STATIC_FIELDS = ["len", "beam", "dest", "imo", "cs", "type"];
+const STATIC_FIELDS = ["len", "beam", "dest", "imo", "cs", "type", "draught", "eta"];
 
 // optional KV (Vercel KV or Upstash), via the Upstash REST client
 function getKV() {
@@ -36,6 +36,14 @@ function getKV() {
   } catch (e) {
     return null; // dependency unavailable — fall back to snapshot-only
   }
+}
+
+// AIS ETA is a {Month,Day,Hour,Minute} object; 0 / out-of-range means "not set".
+function formatEta(e) {
+  if (!e || !e.Month || !e.Day) return null;
+  const p2 = (n) => String(n).padStart(2, "0");
+  const hm = (e.Hour != null && e.Hour < 24 && e.Minute != null && e.Minute < 60) ? " " + p2(e.Hour) + ":" + p2(e.Minute) : "";
+  return p2(e.Month) + "-" + p2(e.Day) + hm;
 }
 
 function parse(msg) {
@@ -63,7 +71,9 @@ function parse(msg) {
       dest: (s.Destination || "").trim() || null,
       imo: s.ImoNumber || null,
       cs: (s.CallSign || "").trim() || null,
-      type: s.Type != null ? s.Type : null
+      type: s.Type != null ? s.Type : null,
+      draught: (typeof s.MaximumStaticDraught === "number" && s.MaximumStaticDraught > 0) ? s.MaximumStaticDraught : null,
+      eta: formatEta(s.Eta)
     };
     const nm = (s.Name || "").trim();
     if (nm) patch.name = nm;
@@ -160,6 +170,7 @@ module.exports = async (req, res) => {
       lat: r.lat, lon: r.lon, sog: r.sog, course: r.course, heading: r.heading, nav: r.nav,
       name: r.name || null, len: r.len || null, beam: r.beam || null, dest: r.dest || null,
       imo: r.imo || null, cs: r.cs || null, type: (r.type != null ? r.type : null),
+      draught: r.draught || null, eta: r.eta || null,
       ageMs: now - (r.ts || now)
     };
   });

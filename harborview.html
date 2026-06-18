@@ -143,6 +143,12 @@
     var m={0:"Under way",1:"At anchor",2:"Not under command",3:"Restricted manoeuvrability",4:"Constrained by draught",5:"Moored",6:"Aground",7:"Fishing",8:"Under way sailing",15:""};
     return (n in m)?m[n]:"";
   }
+  function formatEta(e){
+    if(!e || !e.Month || !e.Day) return null;
+    var p2=function(n){return String(n).padStart(2,"0");};
+    var hm=(e.Hour!=null && e.Hour<24 && e.Minute!=null && e.Minute<60)?" "+p2(e.Hour)+":"+p2(e.Minute):"";
+    return p2(e.Month)+"-"+p2(e.Day)+hm;
+  }
 
   /* ---------- top-down ship silhouettes (bow up; MapLibre rotates by heading) ---------- */
   var COLOR={cargo:"#E8A93C",tanker:"#E0795F",cruise:"#5AA7E6",tug:"#4FB477",sail:"#CBD8E0",small:"#46C2B0"};
@@ -240,7 +246,9 @@
     var rows = ""
       + row("Flag", flag(v.mmsi) + ' <span class="bdg b-mid">MMSI</span>')
       + row("Destination", dest + ' <span class="bdg b-crew">crew</span>')
+      + row("ETA", (v.eta ? v.eta+' <span class="bdg b-crew">crew</span>' : "—"))
       + row("Beam", (v.beam? v.beam+" m":"—"))
+      + row("Draught", (v.draught? v.draught.toFixed(1)+" m":"—"))
       + row("IMO", (v.imo? v.imo : "—"))
       + row("Call sign", (v.cs? v.cs : "—"))
       + row("Position", v.lat.toFixed(4)+"°, "+v.lon.toFixed(4)+"° <span class='bdg b-ais'>AIS</span>")
@@ -275,7 +283,7 @@
   /* ---------- ingest ---------- */
   function upsert(mmsi, patch){
     var v=vessels.get(mmsi);
-    if(!v){ v={mmsi:mmsi, name:null, len:null, beam:null, sog:null, course:null, heading:null, nav:15, dest:null, imo:null, cs:null, lat:null, lon:null, bearing:null, range:null, cat:"Vessel", glyph:"small", t:Date.now(), demo:false}; vessels.set(mmsi,v); }
+    if(!v){ v={mmsi:mmsi, name:null, len:null, beam:null, sog:null, course:null, heading:null, nav:15, dest:null, imo:null, cs:null, draught:null, eta:null, lat:null, lon:null, bearing:null, range:null, cat:"Vessel", glyph:"small", t:Date.now(), demo:false}; vessels.set(mmsi,v); }
     Object.assign(v, patch); v.t=Date.now();
     if(v.lat!=null && v.lon!=null){ var g=geo(v.lat,v.lon); v.range=g.range; v.bearing=g.bearing; }
     return v;
@@ -292,7 +300,9 @@
       var s=msg.Message.ShipStaticData, dim=s.Dimension||{}, len=(dim.A!=null&&dim.B!=null)?(dim.A+dim.B):null, beam=(dim.C!=null&&dim.D!=null)?(dim.C+dim.D):null;
       var ti=typeInfo(s.Type, len);
       upsert(mmsi, {name:(s.Name||"").trim()||undefined, len:len, beam:beam, dest:(s.Destination||"").trim()||null,
-        imo:(s.ImoNumber||null), cs:(s.CallSign||"").trim()||null, cat:ti.label, glyph:ti.glyph});
+        imo:(s.ImoNumber||null), cs:(s.CallSign||"").trim()||null,
+        draught:(typeof s.MaximumStaticDraught==="number"&&s.MaximumStaticDraught>0?s.MaximumStaticDraught:null), eta:formatEta(s.Eta),
+        cat:ti.label, glyph:ti.glyph});
     }
   }
   function applyVessel(v){
@@ -300,7 +310,7 @@
     var ti=typeInfo(v.type, v.len);
     var rec=upsert(v.mmsi, {lat:v.lat, lon:v.lon, sog:v.sog, course:v.course, heading:v.heading, nav:v.nav,
       name:v.name||undefined, len:v.len, beam:v.beam, dest:v.dest||null, imo:v.imo||null, cs:v.cs||null,
-      cat:ti.label, glyph:ti.glyph});
+      draught:v.draught||null, eta:v.eta||null, cat:ti.label, glyph:ti.glyph});
     if(v.ageMs!=null) rec.t=Date.now()-v.ageMs;
   }
 
